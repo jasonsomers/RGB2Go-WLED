@@ -1,7 +1,6 @@
 name: 'Close stale issues and PRs'
 on:
-  schedule:
-    - cron: '0 12 * * *'
+  # Manual-only for RGB2Go fork. Run from the Actions tab when needed.
   workflow_dispatch:
 
 jobs:

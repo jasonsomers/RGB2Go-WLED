@@ -1,9 +1,8 @@
 name: WLED Release CI
 
 on:
-  push:
-    tags:
-      - '*'
+  # Manual-only for RGB2Go fork. Run from the Actions tab when needed.
+  workflow_dispatch:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true

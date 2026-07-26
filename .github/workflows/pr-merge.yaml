@@ -1,8 +1,7 @@
     name: Notify Discord on PR Merge
     on:
+      # Manual-only for RGB2Go fork. Run from the Actions tab when needed.
       workflow_dispatch:
-      pull_request_target:
-        types: [closed]
 
     jobs:
       notify:

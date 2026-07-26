@@ -1,10 +1,7 @@
 
 name: Deploy Nightly
 on:
-  # This can be used to automatically publish nightlies at UTC nighttime
-  schedule:
-    - cron: '0 2 * * *' # run at 2 AM UTC
-  # This can be used to allow manually triggering nightlies from the web interface
+  # Manual-only for RGB2Go fork. Run from the Actions tab when needed.
   workflow_dispatch:
 
 env:
