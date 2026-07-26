@@ -1,0 +1,163 @@
+name: Build RGB2Go WLED firmware
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_set:
+        description: "Which firmware set to build"
+        type: choice
+        required: true
+        default: changed-defaults
+        options:
+          - changed-defaults
+          - all
+          - oled
+          - ethernet
+          - dmx
+          - base
+          - single
+      environment:
+        description: "Single PlatformIO env when build_set=single, e.g. tetra2go_esp32_eth"
+        type: string
+        required: false
+        default: ""
+      release_tag:
+        description: "Release tag to upload to when upload_to_release=true"
+        type: string
+        required: false
+        default: "v16.0.1-rgb2go"
+      upload_to_release:
+        description: "Attach built bins/checksums/archive to a GitHub Release"
+        type: boolean
+        required: true
+        default: false
+
+permissions:
+  contents: write
+
+env:
+  PYTHON_VERSION: "3.11"
+  NODE_VERSION: "20"
+  PLATFORMIO_CORE_DIR: ~/.platformio
+
+concurrency:
+  group: rgb2go-firmware-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build RGB2Go firmware
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Cache PlatformIO packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            .pio
+          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini', 'platformio_override.ini') }}
+          restore-keys: |
+            pio-${{ runner.os }}-
+
+      - name: Install build tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install platformio
+          npm ci
+
+      - name: Build web UI headers
+        run: npm run build
+
+      - name: Resolve firmware environments
+        id: envs
+        shell: bash
+        run: |
+          python .github/workflows/scripts/rgb2go_envs.py \
+            --set "${{ inputs.build_set }}" \
+            --single "${{ inputs.environment }}" \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: Build selected firmware sequentially
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist/firmware dist/logs
+          while IFS= read -r env; do
+            [ -n "$env" ] || continue
+            echo "::group::Build $env"
+            pio run -e "$env" 2>&1 | tee "dist/logs/${env}.log"
+            echo "::endgroup::"
+          done < dist/envs.txt
+
+      - name: Collect firmware and checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          python .github/workflows/scripts/rgb2go_collect.py --env-list dist/envs.txt --out dist/firmware
+          (cd dist && sha256sum firmware/*.bin > SHA256SUMS.txt)
+          tar -czf "dist/RGB2Go-WLED-${{ inputs.release_tag }}-firmware.tar.gz" -C dist firmware SHA256SUMS.txt
+          sha256sum "dist/RGB2Go-WLED-${{ inputs.release_tag }}-firmware.tar.gz" > "dist/RGB2Go-WLED-${{ inputs.release_tag }}-firmware.tar.gz.sha256"
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: rgb2go-firmware-${{ inputs.build_set }}-${{ github.run_number }}
+          path: |
+            dist/firmware/*.bin
+            dist/SHA256SUMS.txt
+            dist/*.tar.gz
+            dist/*.sha256
+            dist/envs.txt
+            dist/logs/*.log
+          retention-days: 14
+
+      - name: Upload to GitHub Release
+        if: ${{ inputs.upload_to_release }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --title "$RELEASE_TAG" --notes "RGB2Go WLED firmware release $RELEASE_TAG"
+          fi
+          gh release upload "$RELEASE_TAG" \
+            dist/firmware/*.bin \
+            dist/SHA256SUMS.txt \
+            dist/*.tar.gz \
+            dist/*.sha256 \
+            --clobber
+
+      - name: Job summary
+        shell: bash
+        run: |
+          {
+            echo "## RGB2Go firmware build"
+            echo
+            echo "Build set: \\`${{ inputs.build_set }}\\`"
+            echo "Release tag: \\`${{ inputs.release_tag }}\\`"
+            echo
+            echo "### Environments"
+            sed 's/^/- `/' dist/envs.txt | sed 's/$/`/'
+            echo
+            echo "### Firmware checksums"
+            sed 's/^/- `/' dist/SHA256SUMS.txt | sed 's/$/`/'
+          } >> "$GITHUB_STEP_SUMMARY"
