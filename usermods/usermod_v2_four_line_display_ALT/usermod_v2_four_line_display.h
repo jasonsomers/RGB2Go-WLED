@@ -38,7 +38,9 @@
 
 // When to time out to the clock or blank the screen
 // if SLEEP_MODE_ENABLED.
+#ifndef SCREEN_TIMEOUT_MS
 #define SCREEN_TIMEOUT_MS  60*1000    // 1 min
+#endif
 
 // Minimum time between redrawing screen in ms
 #define REFRESH_RATE_MS 1000
