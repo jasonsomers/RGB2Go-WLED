@@ -41,6 +41,7 @@ static void applyMatrix2GoFactoryDefaults()
   // Keep these first-boot time settings explicit rather than relying on upstream defaults.
   ntpEnabled = true;
   useAMPM = true;
+  bootPreset = 1;
   currentTimezone = 4; // US-EST/EDT
   utcOffsetSecs = 0;
   strlcpy(ntpServerName, "0.wled.pool.ntp.org", sizeof(ntpServerName));
