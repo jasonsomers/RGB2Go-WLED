@@ -1,5 +1,9 @@
 #include "wled.h"
 
+#ifdef MATRIX2GO_FACTORY_DEFAULTS
+  #include "matrix2go_factory_defaults.h"
+#endif
+
 /*
  * Methods to handle saving and loading presets to/from the filesystem
  */
@@ -104,15 +108,20 @@ void initPresetsFile()
   char fileName[33]; strncpy_P(fileName, getPresetsFileName(), 32); fileName[32] = 0; //use PROGMEM safe copy as FS.open() does not
   if (WLED_FS.exists(fileName)) return;
 
-  StaticJsonDocument<64> doc;
-  JsonObject sObj = doc.to<JsonObject>();
-  sObj.createNestedObject("0");
   File f = WLED_FS.open(fileName, "w");
   if (!f) {
     errorFlag = ERR_FS_GENERAL;
     return;
   }
+#ifdef MATRIX2GO_FACTORY_DEFAULTS
+  // Matrix2Go images receive starter presets only when no preset file exists.
+  f.print(FPSTR(matrix2goFactoryPresets));
+#else
+  StaticJsonDocument<64> doc;
+  JsonObject sObj = doc.to<JsonObject>();
+  sObj.createNestedObject("0");
   serializeJson(doc, f);
+#endif
   f.close();
 }
 
